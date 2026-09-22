@@ -7731,7 +7731,7 @@
         }
         postMessage('SIMULATION_NAVIGATE', payload);
     }
-    async async function handleStandaloneSubmit() {
+    async function handleStandaloneSubmit() {
         if (state.submissionStatus === 'submitted') return;
         try {
             const submissionSnapshot = buildSubmissionSnapshot();
