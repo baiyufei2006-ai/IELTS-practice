@@ -1,0 +1,37 @@
+name: Rebuild bundles
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rebuild generated JavaScript bundles
+        run: node scripts/build-bundles.mjs
+
+      - name: Commit rebuilt bundles
+        run: |
+          if git diff --quiet -- js/bundles; then
+            echo "Bundles are already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/bundles
+          git commit -m "Rebuild generated bundles"
+          git push
