@@ -7186,7 +7186,12 @@
         lastInitSignature: '',
         lastReplaySignature: '',
         sessionReadySent: false,
-        parentWindow: global.opener || global.parent || null,
+        // Only treat a real opener/embedded parent as a host. On a standalone
+        // GitHub Pages tab, window.parent is the current window and must not be
+        // mistaken for the practice host.
+        parentWindow: (global.opener && global.opener !== global)
+            ? global.opener
+            : (global.parent && global.parent !== global ? global.parent : null),
         expectedParentOrigin: deriveReferrerOrigin(),
         parentOrigin: '',
         parentOriginIsOpaque: false,
@@ -14772,6 +14777,39 @@
             activeSlot.lastResults = results;
         }
         const messageType = state.simulationMode ? 'SIMULATION_SUBMIT' : 'PRACTICE_COMPLETE';
+
+        // Standalone GitHub Pages fallback:
+        // When this runner is opened directly (rather than inside the app host),
+        // window.parent/window.opener points to itself and there is no host
+        // available to receive PRACTICE_COMPLETE. Submit locally so the result
+        // page still works on a static deployment.
+        const hasStandaloneHost = Boolean(
+            state.parentWindow
+            && state.parentWindow !== global
+            && typeof state.parentWindow.postMessage === 'function'
+        );
+        if (!hasStandaloneHost && !state.simulationMode) {
+            clearSubmissionAckTimer();
+            state.submissionStatus = 'submitted';
+            state.submitted = true;
+            setReadOnlyMode(true, 'final-submit');
+            disableDragInteractions();
+            setTimerRunning(false);
+            const localResults = postedResults || results || {};
+            state.lastResults = localResults;
+            renderResults(localResults);
+            await renderExplanations();
+            applyHighlights(highlightSnapshot);
+            refreshNoteHighlightAttributes();
+            restoreMissingNoteAnchors();
+            applyMemorizeLocatorHighlights();
+            enhanceReviewHighlights();
+            updateNavStatuses(localResults);
+            setExitButtonVisible(false);
+            syncPrimaryActionButtons();
+            return;
+        }
+
         const timing = resolvePracticeTiming(1, submissionSnapshot.timerSnapshot);
         beginSubmission(messageType, Object.assign({
             duration: timing.duration,
