@@ -6641,7 +6641,10 @@
                 if (!state.readOnly || canResetSubmittedSingle) {
                     setSubmitLabel(dom.submitBtn.dataset.defaultLabel || 'Submit');
                 }
-                dom.submitBtn.disabled = state.readOnly || state.submissionStatus === 'submitting';
+                const standaloneSubmitEnabled = !state.parentWindow && !state.simulationMode && !state.reviewMode;
+            dom.submitBtn.disabled = standaloneSubmitEnabled
+                ? state.submissionStatus === 'submitting'
+                : (state.readOnly || state.submissionStatus === 'submitting');
             }
             if (dom.resetBtn) {
                 // Footer Reset is review/retake-only. Draft clearing lives in
@@ -7728,9 +7731,53 @@
         }
         postMessage('SIMULATION_NAVIGATE', payload);
     }
-    async function handleSubmit() {
+    async async function handleStandaloneSubmit() {
+        if (state.submissionStatus === 'submitted') return;
+        try {
+            const submissionSnapshot = buildSubmissionSnapshot();
+            const localResults = submissionSnapshot.results || {};
+            const highlightSnapshot = Array.isArray(submissionSnapshot.highlights)
+                ? submissionSnapshot.highlights
+                : [];
+            clearSubmissionAckTimer();
+            state.submissionStatus = 'submitted';
+            state.submitted = true;
+            state.lastResults = localResults;
+            setReadOnlyMode(true, 'final-submit');
+            disableDragInteractions();
+            setTimerRunning(false);
+            renderResults(localResults);
+            await renderExplanations();
+            applyHighlights(highlightSnapshot);
+            refreshNoteHighlightAttributes();
+            restoreMissingNoteAnchors();
+            applyMemorizeLocatorHighlights();
+            enhanceReviewHighlights();
+            updateNavStatuses(localResults);
+            setExitButtonVisible(false);
+            syncPrimaryActionButtons();
+        } catch (error) {
+            console.error('[UnifiedReadingPage] standalone submit failed:', error);
+            state.submissionStatus = 'draft';
+            state.submitted = false;
+            state.readOnly = false;
+            state.readOnlyReason = '';
+            if (dom.results) {
+                dom.results.style.display = '';
+                dom.results.innerHTML = '<div class="group"><h4>提交失败</h4><p>页面提交时出现错误，请刷新后再试。</p></div>';
+            }
+            syncPrimaryActionButtons();
+        }
+    }
+
+    function handleSubmit() {
         if (state.memorizeMode && !state.reviewMode && !state.simulationMode) {
             handleExitClick();
+            return;
+        }
+        const isStandalonePage = !state.parentWindow && !state.simulationMode && !state.reviewMode;
+        if (isStandalonePage) {
+            handleStandaloneSubmit();
             return;
         }
         if (state.readOnly || state.submissionStatus !== 'draft') {
@@ -7883,7 +7930,13 @@
     }
 
     function attachActionListeners() {
-        dom.submitBtn?.addEventListener('click', handleSubmit);
+        dom.submitBtn?.addEventListener('click', () => {
+            try {
+                handleSubmit();
+            } catch (error) {
+                console.error('[UnifiedReadingPage] submit click failed:', error);
+            }
+        });
         dom.resetBtn?.addEventListener('click', handleReset);
         document.getElementById('options-clear-answers')?.addEventListener('click', handleReset);
         dom.exitBtn?.addEventListener('click', handleExitClick);
