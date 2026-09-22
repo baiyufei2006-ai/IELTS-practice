@@ -161,7 +161,12 @@
         lastInitSignature: '',
         lastReplaySignature: '',
         sessionReadySent: false,
-        parentWindow: global.opener || global.parent || null,
+        // Only treat a real opener/embedded parent as a host. On a standalone
+        // GitHub Pages tab, window.parent is the current window and must not be
+        // mistaken for the practice host.
+        parentWindow: (global.opener && global.opener !== global)
+            ? global.opener
+            : (global.parent && global.parent !== global ? global.parent : null),
         expectedParentOrigin: deriveReferrerOrigin(),
         parentOrigin: '',
         parentOriginIsOpaque: false,
